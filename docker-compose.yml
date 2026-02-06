@@ -1,0 +1,16 @@
+services:
+  pheme:
+    build: .
+    container_name: pheme
+    restart: unless-stopped
+    ports:
+      - "8020:8020"
+    volumes:
+      - pheme-data:/data
+    env_file:
+      - .env
+    environment:
+      - PHEME_DB_PATH=/data/pheme.sqlite
+
+volumes:
+  pheme-data:

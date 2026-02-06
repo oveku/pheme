@@ -1,0 +1,49 @@
+[project]
+name = "pheme"
+version = "0.2.0"
+description = "Daily news digest service - gathers, summarizes, and delivers"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "httpx>=0.27.0",
+    "feedparser>=6.0.0",
+    "beautifulsoup4>=4.12.0",
+    "apscheduler>=3.10.0",
+    "jinja2>=3.1.0",
+    "ollama>=0.4.0",
+    "aiosqlite>=0.20.0",
+    "aiosmtplib>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx",
+    "respx>=0.22.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "api: API endpoint tests",
+    "fetcher: Fetcher tests",
+    "email: Email tests",
+    "pipeline: Pipeline tests",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

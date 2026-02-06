@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pheme Daily Digest - {{ date }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.5;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 12px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            padding: 12px 0;
+            border-bottom: 2px solid #2c3e50;
+            margin-bottom: 16px;
+        }
+        .header h1 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 20px;
+        }
+        .header .date {
+            color: #7f8c8d;
+            font-size: 13px;
+        }
+        .overview {
+            background: #edf2f7;
+            border-left: 3px solid #2c3e50;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: #444;
+            border-radius: 0 4px 4px 0;
+        }
+        .topic-section {
+            margin-bottom: 16px;
+        }
+        .topic-header {
+            background: #2c3e50;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 4px 4px 0 0;
+            margin: 0;
+        }
+        .topic-body {
+            background: #fff;
+            border-radius: 0 0 4px 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        }
+        .article-row {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        .article-row:last-child {
+            border-bottom: none;
+        }
+        .article-row a {
+            color: #2980b9;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .article-row a:hover {
+            text-decoration: underline;
+        }
+        .article-row .source-tag {
+            color: #999;
+            font-size: 11px;
+        }
+        .article-row .summary {
+            color: #666;
+            font-size: 12px;
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+        .footer {
+            text-align: center;
+            padding: 10px 0;
+            color: #aaa;
+            font-size: 11px;
+            border-top: 1px solid #ddd;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Pheme Daily Digest</h1>
+        <div class="date">{{ date }} &mdash; {{ article_count }} articles from {{ source_count }} sources</div>
+    </div>
+
+    {% if digest.summary %}
+    <div class="overview">{{ digest.summary }}</div>
+    {% endif %}
+
+    {% if digest.topic_sections %}
+    {% for section in digest.topic_sections %}
+    {% if section.entries %}
+    <div class="topic-section">
+        <div class="topic-header">{{ section.topic_name }} ({{ section.entries|length }})</div>
+        <div class="topic-body">
+            {% for entry in section.entries %}
+            <div class="article-row">
+                <a href="{{ entry.article.url }}">{{ entry.article.title }}</a>
+                <span class="source-tag">&mdash; {{ entry.article.source_name }}</span>
+                <div class="summary">{{ entry.summary }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {% elif digest.entries %}
+    <div class="topic-section">
+        <div class="topic-header">All Articles</div>
+        <div class="topic-body">
+        {% for entry in digest.entries %}
+        <div class="article-row">
+            <a href="{{ entry.article.url }}">{{ entry.article.title }}</a>
+            <span class="source-tag">&mdash; {{ entry.article.source_name }}</span>
+            {% if entry.summary %}
+            <div class="summary">{{ entry.summary }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not digest.entries and not digest.topic_sections %}
+    <div class="overview">No articles were fetched today. Check your source configuration.</div>
+    {% endif %}
+
+    <div class="footer">
+        Pheme &mdash; Your Daily News Digest
+        {% if digest.model %} &middot; Summarized by {{ digest.model }}{% endif %}
+    </div>
+</body>
+</html>
