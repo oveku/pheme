@@ -65,7 +65,7 @@ Web Pages ─┘   Strategy +      BeautifulSoup          Keyword + regex
 
 ```bash
 # Clone
-git clone https://github.com/your-username/pheme.git
+git clone https://github.com/oveku/pheme.git
 cd pheme
 
 # Virtual environment
