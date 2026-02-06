@@ -1,5 +1,6 @@
 services:
   pheme:
+    image: pheme:latest
     build: .
     container_name: pheme
     restart: unless-stopped
