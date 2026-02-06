@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="pheme-hero.png" alt="Pheme - Your Daily News Digest" width="600">
+  <img src="pheme-hero.png" alt="Pheme — AI-powered daily news digest" width="700">
 </p>
 
 <h1 align="center">
@@ -8,69 +8,70 @@
 </h1>
 
 <p align="center">
-  <em>The news lady who gathers, summarizes, and delivers your daily digest.</em>
+  <em>Named after the Greek goddess of fame and report — she gathers, summarizes, and delivers your daily news digest.</em>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> &middot;
-  <a href="#docker">Docker</a> &middot;
-  <a href="#api">API</a> &middot;
-  <a href="#configuration">Configuration</a> &middot;
-  <a href="#admin-ui">Admin UI</a>
+  <a href="#features">Features</a> · <a href="#quick-start">Quick Start</a> · <a href="#docker">Docker</a> · <a href="#admin-ui">Admin UI</a> · <a href="#api-reference">API</a> · <a href="#configuration">Configuration</a>
 </p>
 
 ---
 
-**Pheme** (named after the Greek goddess of fame and report) is a self-hosted Python service that aggregates news from RSS feeds, summarizes articles using a local LLM via [Ollama](https://ollama.com), and delivers a curated HTML digest by email every morning.
+**Pheme** is a self-hosted Python service that aggregates news from RSS feeds, Reddit, and web pages, summarizes articles using a local LLM via [Ollama](https://ollama.com), and delivers a curated HTML digest by email every morning.
 
-She runs entirely on your own hardware -- no cloud APIs, no tracking, no subscriptions.
+She runs entirely on your own hardware — no cloud APIs, no tracking, no subscriptions.
 
 ## Features
 
-- **Multi-source aggregation** -- RSS feeds, with extensible fetcher architecture for Reddit and web scraping
-- **Local LLM summarization** -- powered by Ollama; runs any model you choose (default: `qwen2.5:1.5b-instruct`)
-- **Topic-based digests** -- group sources into topics (e.g. "Tech News", "Norwegian News") for organized digests
-- **Scheduled delivery** -- daily email via APScheduler cron (default: 06:00 UTC)
-- **Full-text extraction** -- fetches complete article content for better summaries, not just RSS snippets
-- **Admin UI** -- built-in web interface for managing sources, topics, and triggering digests
-- **204 tests** -- comprehensive test suite with 80%+ coverage target
+- **Multi-source aggregation** — RSS/Atom feeds, Reddit subreddits, and generic web scraping via a pluggable fetcher architecture
+- **Local LLM summarization** — powered by [Ollama](https://ollama.com); runs any model you choose (default: `qwen2.5:1.5b-instruct`)
+- **Topic-based digests** — organize sources into topics with keyword matching, regex patterns, and priority-based ranking
+- **Full-text extraction** — fetches complete article content for better summaries, not just RSS snippets
+- **Scheduled delivery** — daily email via APScheduler cron (default: 06:00 UTC)
+- **Admin UI** — built-in dark-themed web interface for managing sources, topics, and triggering digests
+- **Comprehensive tests** — 200+ tests with 80%+ coverage target
 
 ## Architecture
 
 ```
-RSS Feeds / Web Sources
-        |
-    [Fetchers]       Strategy + Factory pattern
-        |
-  [Full-text Extract] trafilatura / BeautifulSoup
-        |
-   [Summarizer]      Ollama LLM (local, private)
-        |
-    [Composer]       HTML + plain-text email
-        |
-  [Email Sender]     SMTP (Gmail, Fastmail, etc.)
-        |
-   [Scheduler]       APScheduler cron (daily)
+RSS Feeds ─┐
+Reddit ────┤── [Fetchers]  ── [Full-text Extract] ── [Topic Matching]
+Web Pages ─┘   Strategy +      BeautifulSoup          Keyword + regex
+               Factory                                 scoring
+
+                    ↓
+
+              [Summarizer]  →  [Composer]  →  [Email Sender]  →  📬
+              Ollama LLM       Jinja2 HTML     aiosmtplib
+              (local)          + plain text     (STARTTLS)
+
+                    ↓
+
+              [Scheduler]      APScheduler cron (daily at 06:00)
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.12+
-- An [Ollama](https://ollama.com) instance with a model pulled (e.g. `ollama pull qwen2.5:1.5b-instruct`)
-- SMTP credentials for sending email (Gmail app passwords work well)
+- **Python 3.12+**
+- An [Ollama](https://ollama.com) instance with a model pulled:
+  ```bash
+  ollama pull qwen2.5:1.5b-instruct
+  ```
+- SMTP credentials for email delivery (Gmail [app passwords](https://support.google.com/accounts/answer/185833) work well)
 
-### Run Locally
+### Install & Run
 
 ```bash
-# Clone and set up
+# Clone
 git clone https://github.com/your-username/pheme.git
 cd pheme
 
+# Virtual environment
 python -m venv .venv
-source .venv/bin/activate    # Linux/Mac
-.venv\Scripts\activate       # Windows
+source .venv/bin/activate      # Linux / macOS
+.venv\Scripts\activate         # Windows
 
 pip install -r requirements.txt
 
@@ -85,11 +86,11 @@ python seed.py
 uvicorn app.main:app --host 0.0.0.0 --port 8020
 ```
 
-Pheme is now running at `http://localhost:8020`. Visit the admin UI at `http://localhost:8020/ui`.
+Pheme is now running at **http://localhost:8020**. Visit the admin UI at **/admin**.
 
 ## Docker
 
-The easiest way to run Pheme:
+The simplest way to run Pheme in production:
 
 ```bash
 # Configure
@@ -103,9 +104,9 @@ docker compose up -d
 docker compose exec pheme python seed.py
 ```
 
-### Docker Compose with external Ollama
+### Connecting to an External Ollama Host
 
-If Ollama runs on another host, set `OLLAMA_HOST` in your `.env`:
+If Ollama runs on another machine on your network:
 
 ```dotenv
 OLLAMA_HOST=http://your-ollama-host:11434
@@ -113,9 +114,16 @@ OLLAMA_HOST=http://your-ollama-host:11434
 
 ## Admin UI
 
-Pheme includes a built-in admin interface at `/ui` for managing sources, topics, and triggering digests without touching the API directly.
+Pheme includes a built-in admin interface at `/admin` for managing your digest without touching the API:
 
-## API
+| Page | Path | What You Can Do |
+|------|------|-----------------|
+| Dashboard | `/admin` | Overview of sources, topics, and recent digests |
+| Sources | `/admin/sources` | Add, view, and delete RSS/Reddit/web sources |
+| Topics | `/admin/topics` | Create topics with keywords, regex patterns, and priorities |
+| Digest | `/admin/digest` | Trigger a manual digest run and view send history |
+
+## API Reference
 
 ### Sources
 
@@ -136,7 +144,7 @@ Pheme includes a built-in admin interface at `/ui` for managing sources, topics,
 | `GET` | `/api/topics/{id}` | Get topic details |
 | `PUT` | `/api/topics/{id}` | Update a topic |
 | `DELETE` | `/api/topics/{id}` | Remove a topic |
-| `GET` | `/api/topics/{id}/sources` | List sources in a topic |
+| `GET` | `/api/topics/{id}/sources` | List sources for a topic |
 
 ### Digest
 
@@ -153,64 +161,84 @@ Pheme includes a built-in admin interface at `/ui` for managing sources, topics,
 curl -X POST http://localhost:8020/api/sources \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "TLDR Tech",
+    "name": "Hacker News",
     "type": "rss",
-    "url": "https://tldr.tech/api/rss/tech",
-    "category": "tech"
+    "url": "https://hnrss.org/best",
+    "category": "tech",
+    "config": {"max_items": 15}
   }'
 
-# Create a topic
+# Add a Reddit source
+curl -X POST http://localhost:8020/api/sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "r/MachineLearning",
+    "type": "reddit",
+    "url": "r/MachineLearning",
+    "category": "ai",
+    "config": {"sort": "hot", "limit": 10}
+  }'
+
+# Create a topic with keyword matching
 curl -X POST http://localhost:8020/api/topics \
   -H "Content-Type: application/json" \
-  -d '{"name": "Tech News", "description": "Technology and software"}'
+  -d '{
+    "name": "AI & Machine Learning",
+    "keywords": ["AI", "machine learning", "LLM", "neural network", "GPT"],
+    "priority": 80,
+    "max_articles": 10
+  }'
 
-# Trigger a digest manually
+# Trigger a digest
 curl -X POST http://localhost:8020/api/digest/trigger
 ```
 
 ## Configuration
 
-All settings are configured via environment variables (or a `.env` file):
+All settings via environment variables or `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint |
 | `OLLAMA_MODEL` | `qwen2.5:1.5b-instruct` | LLM model for summarization |
-| `SMTP_HOST` | `smtp.gmail.com` | SMTP server |
-| `SMTP_PORT` | `587` | SMTP port |
-| `SMTP_USER` | -- | Email sender address |
-| `SMTP_PASSWORD` | -- | App password |
-| `DIGEST_RECIPIENT` | -- | Email recipient |
-| `DIGEST_CRON_HOUR` | `6` | Digest send hour (UTC) |
+| `SMTP_HOST` | `smtp.gmail.com` | SMTP server hostname |
+| `SMTP_PORT` | `587` | SMTP port (STARTTLS) |
+| `SMTP_USER` | — | Sender email address |
+| `SMTP_PASSWORD` | — | SMTP password / app password |
+| `DIGEST_RECIPIENT` | — | Recipient email address |
+| `DIGEST_CRON_HOUR` | `6` | Digest send hour |
 | `DIGEST_CRON_MINUTE` | `0` | Digest send minute |
 | `DIGEST_TIMEZONE` | `UTC` | Scheduler timezone |
-| `PHEME_PORT` | `8020` | API port |
+| `PHEME_PORT` | `8020` | HTTP server port |
 | `PHEME_DB_PATH` | `./pheme.sqlite` | SQLite database path |
 
 ## Testing
 
 ```bash
-# Run all 204 tests
+# Run all tests
 python -m pytest tests/ -v
 
-# With coverage
+# With coverage report
 python -m pytest tests/ --cov=app --cov-report=term-missing
 
-# Specific markers
+# By category
 python -m pytest tests/ -m unit
 python -m pytest tests/ -m api
 python -m pytest tests/ -m fetcher
+python -m pytest tests/ -m pipeline
 ```
 
-## Design
+## Design Patterns
 
-Pheme uses several Gang of Four design patterns:
+Pheme uses several classic design patterns:
 
-- **Strategy** -- fetcher types (RSS, Reddit, Web) are interchangeable
-- **Factory** -- `FetcherFactory` creates the right fetcher based on source type
-- **Template Method** -- `BaseFetcher.fetch()` defines the algorithm skeleton
-- **Observer** -- pipeline notifies components at each stage
-- **Singleton** -- database connection and config managed as singletons
+| Pattern | Where | Purpose |
+|---------|-------|---------|
+| **Strategy** | `fetchers/` | RSS, Reddit, and Web fetchers are interchangeable |
+| **Factory** | `FetcherFactory` | Creates the correct fetcher from source type |
+| **Template Method** | `BaseFetcher.fetch()` | Defines connect → extract → normalize skeleton |
+| **Singleton** | `config.py`, `database.py` | Settings and DB connection managed as singletons |
+| **Pipeline** | `DigestPipeline` | Orchestrates fetch → extract → match → summarize → email |
 
 ## Project Structure
 
@@ -218,27 +246,31 @@ Pheme uses several Gang of Four design patterns:
 pheme/
 ├── app/
 │   ├── api/           # REST API routes (sources, topics, digest)
-│   ├── email/         # Composer + SMTP sender
+│   ├── email/         # HTML/plain-text composer + SMTP sender
 │   ├── fetchers/      # RSS, Reddit, Web fetchers + factory
-│   ├── pipeline/      # Digest orchestrator (fetch → summarize → email)
-│   ├── scheduler/     # APScheduler cron jobs
+│   ├── pipeline/      # Digest orchestrator + topic matching engine
+│   ├── scheduler/     # APScheduler cron job definitions
 │   ├── static/        # Icons and static assets
-│   ├── summarizer/    # Ollama LLM client
-│   ├── templates/     # Jinja2 email templates (HTML + plain text)
+│   ├── summarizer/    # Ollama LLM client with fallback
+│   ├── templates/     # Jinja2 email templates
 │   ├── ui/            # Built-in admin web interface
 │   ├── config.py      # Pydantic settings from environment
-│   ├── database.py    # SQLite/aiosqlite CRUD layer
+│   ├── database.py    # async SQLite CRUD layer
 │   ├── main.py        # FastAPI app with lifespan management
 │   └── models.py      # Pydantic data models
-├── tests/             # 204 tests (pytest + pytest-asyncio)
+├── tests/             # 200+ tests (pytest + pytest-asyncio)
 ├── Dockerfile
 ├── docker-compose.yml
-├── requirements.txt
 ├── pyproject.toml
-├── seed.py            # Example source seeder
+├── requirements.txt
+├── seed.py            # Default source seeder
 └── .env.example       # Configuration template
 ```
 
+## Etymology
+
+> **Pheme** (Φήμη) was the Greek goddess — and personification — of fame, rumour, and report. She was described as having many eyes and mouths, always watching and always speaking. Fitting for a service that watches dozens of news sources and reports back with a tidy summary each morning.
+
 ## License
 
-MIT
+[MIT](LICENSE)
