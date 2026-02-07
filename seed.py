@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.config import get_settings
-from app.database import get_db, init_db, create_source, get_sources
+from app.database import get_db, init_db, create_source, get_sources, get_blocked_keywords, add_blocked_keyword
 from app.models import SourceCreate, SourceType
 
 
@@ -92,6 +92,17 @@ async def seed():
         print(f"  Added: {source.name} ({source.type.value}) - {source.url}")
 
     print(f"\nSeeded {len(DEFAULT_SOURCES)} default sources.")
+
+    # Seed blocked keywords
+    existing_keywords = await get_blocked_keywords(db)
+    if existing_keywords:
+        print(f"Database already has {len(existing_keywords)} blocked keywords, skipping seed.")
+    else:
+        default_keywords = ["Trump", "Epstein", "Donald Trump"]
+        for kw in default_keywords:
+            await add_blocked_keyword(db, kw)
+            print(f"  Blocked: {kw}")
+        print(f"\nSeeded {len(default_keywords)} default blocked keywords.")
 
 
 if __name__ == "__main__":

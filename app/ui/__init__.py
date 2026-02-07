@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from app.database import get_db, get_sources, get_topics, get_digest_logs
+from app.database import get_db, get_sources, get_topics, get_digest_logs, get_blocked_keywords, get_app_setting
 
 router = APIRouter()
 
@@ -77,6 +77,7 @@ def _nav() -> str:
         <a href="/admin/sources">Sources</a>
         <a href="/admin/topics">Topics</a>
         <a href="/admin/digest">Digest</a>
+        <a href="/admin/settings">Settings</a>
     </nav>
     """
 
@@ -427,3 +428,106 @@ def _error_page(message: str) -> HTMLResponse:
         </div></body></html>""",
         status_code=400,
     )
+
+
+# ---------------------------------------------------------------------------
+# Settings (blocked keywords + filter scope)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/settings", response_class=HTMLResponse)
+async def admin_settings():
+    """Settings page with blocked keywords management and filter scope toggle."""
+    db = await get_db()
+    keywords = await get_blocked_keywords(db)
+    filter_scope = await get_app_setting(db, "filter_scope", default="title_preview")
+
+    keyword_rows = ""
+    for kw in keywords:
+        keyword_rows += f"""
+        <tr>
+            <td>{kw.keyword}</td>
+            <td>{kw.created_at.strftime('%Y-%m-%d %H:%M')}</td>
+            <td>
+                <form method="post" action="/admin/settings/keywords/{kw.id}/delete" style="background:transparent;padding:0;margin:0;display:inline;">
+                    <button type="submit" class="btn-danger btn-sm">Delete</button>
+                </form>
+            </td>
+        </tr>"""
+
+    checked_preview = 'checked' if filter_scope != 'full_text' else ''
+    checked_full = 'checked' if filter_scope == 'full_text' else ''
+
+    return f"""<!DOCTYPE html><html lang="en">
+    {_HEAD.format(title="Settings")}
+    <body><div class="container">
+    {_nav()}
+    <h1>Settings</h1>
+
+    <div class="card">
+        <h3>Filter Scope</h3>
+        <p class="meta" style="margin-bottom:8px;">Choose which article fields are checked against blocked keywords.</p>
+        <form method="post" action="/admin/settings/filter-scope" style="background:transparent;padding:0;">
+            <label style="display:inline;margin-right:16px;">
+                <input type="radio" name="scope" value="title_preview" {checked_preview}> Title + Preview (faster)
+            </label>
+            <label style="display:inline;">
+                <input type="radio" name="scope" value="full_text" {checked_full}> Title + Preview + Full Text (thorough)
+            </label>
+            <div style="margin-top:8px;"><button type="submit" class="btn-sm">Save</button></div>
+        </form>
+    </div>
+
+    <h1>Blocked Keywords ({len(keywords)})</h1>
+    <form method="post" action="/admin/settings/keywords/add" style="margin-bottom:16px;">
+        <div class="grid">
+            <div><label>Keyword or phrase</label><input name="keyword" required placeholder="e.g. Trump"></div>
+            <div style="display:flex;align-items:flex-end;"><button type="submit">Add Keyword</button></div>
+        </div>
+    </form>
+    <table>
+        <tr><th>Keyword</th><th>Added</th><th></th></tr>
+        {keyword_rows if keyword_rows else '<tr><td colspan="3">No blocked keywords. Articles are not filtered.</td></tr>'}
+    </table>
+    </div></body></html>"""
+
+
+@router.post("/admin/settings/keywords/add", response_class=HTMLResponse)
+async def admin_add_keyword(request: Request):
+    """Handle adding a new blocked keyword."""
+    from app.database import add_blocked_keyword
+
+    form = await request.form()
+    keyword = form.get("keyword", "").strip()
+    if not keyword:
+        return _error_page("Keyword cannot be empty.")
+    try:
+        db = await get_db()
+        await add_blocked_keyword(db, keyword)
+        return _redirect("/admin/settings")
+    except Exception as exc:
+        return _error_page(f"Failed to add keyword: {exc}")
+
+
+@router.post("/admin/settings/keywords/{keyword_id}/delete", response_class=HTMLResponse)
+async def admin_delete_keyword(keyword_id: int):
+    """Handle deleting a blocked keyword."""
+    from app.database import delete_blocked_keyword
+
+    db = await get_db()
+    await delete_blocked_keyword(db, keyword_id)
+    return _redirect("/admin/settings")
+
+
+@router.post("/admin/settings/filter-scope", response_class=HTMLResponse)
+async def admin_set_filter_scope(request: Request):
+    """Handle updating the filter scope setting."""
+    from app.database import set_app_setting
+
+    form = await request.form()
+    scope = form.get("scope", "title_preview")
+    if scope not in ("title_preview", "full_text"):
+        scope = "title_preview"
+    db = await get_db()
+    await set_app_setting(db, "filter_scope", scope)
+    return _redirect("/admin/settings")

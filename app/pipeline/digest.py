@@ -9,13 +9,19 @@ from app.models import Article, DigestEntry, Digest, Source, Topic, TopicSection
 from app.database import (
     get_sources,
     get_topics,
+    get_blocked_keywords,
+    get_app_setting,
     update_source_last_fetched,
     log_digest,
 )
 from app.fetchers.factory import FetcherFactory
 from app.fetchers.extractor import fetch_full_text
 from app.summarizer.llm import LLMSummarizer, SummarizerResult
-from app.pipeline.matching import match_articles_to_topics
+from app.pipeline.matching import (
+    match_articles_to_topics,
+    deduplicate_across_topics,
+    filter_blocked_articles,
+)
 from app.email.sender import send_digest_email
 
 logger = logging.getLogger(__name__)
@@ -82,6 +88,18 @@ class DigestPipeline:
         # 2. Extract full text
         await self._extract_full_text(all_articles)
 
+        # 2b. Apply global keyword blocklist filter
+        blocked_keywords_models = await self._get_blocked_keywords()
+        blocked_keywords = [bk.keyword for bk in blocked_keywords_models]
+        use_full_text = await self._get_filter_scope_full_text()
+        if blocked_keywords:
+            all_articles = filter_blocked_articles(
+                all_articles, blocked_keywords, use_full_text=use_full_text
+            )
+            logger.info(
+                "After keyword filter: %d articles remain", len(all_articles)
+            )
+
         # 3. Get topics and match articles
         topics = await self._get_topics()
         topic_sections: list[TopicSection] = []
@@ -90,6 +108,9 @@ class DigestPipeline:
             # Topic-based mode: match and rank
             matches = match_articles_to_topics(all_articles, topics)
             topics_by_id = {t.id: t for t in topics}
+
+            # 3b. Deduplicate: each article in at most one topic section
+            matches = deduplicate_across_topics(matches, topics_by_id)
 
             for topic_id, scored_articles in matches.items():
                 topic = topics_by_id[topic_id]
@@ -222,6 +243,20 @@ class DigestPipeline:
         if hasattr(self.db, "get_topics"):
             return await self.db.get_topics(enabled_only=True)
         return await get_topics(self.db, enabled_only=True)
+
+    async def _get_blocked_keywords(self):
+        """Get all blocked keywords from DB."""
+        if hasattr(self.db, "get_blocked_keywords"):
+            return await self.db.get_blocked_keywords()
+        return await get_blocked_keywords(self.db)
+
+    async def _get_filter_scope_full_text(self) -> bool:
+        """Read the filter_scope setting; returns True if full_text enabled."""
+        if hasattr(self.db, "get_app_setting"):
+            val = await self.db.get_app_setting("filter_scope", default="title_preview")
+        else:
+            val = await get_app_setting(self.db, "filter_scope", default="title_preview")
+        return val == "full_text"
 
     async def _update_last_fetched(self, source_id: int) -> None:
         if hasattr(self.db, "update_source_last_fetched"):

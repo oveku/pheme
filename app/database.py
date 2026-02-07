@@ -7,6 +7,7 @@ import aiosqlite
 
 from app.config import get_settings
 from app.models import (
+    BlockedKeyword,
     DigestLog,
     Source,
     SourceCreate,
@@ -59,6 +60,17 @@ CREATE TABLE IF NOT EXISTS source_topics (
     PRIMARY KEY (source_id, topic_id),
     FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE,
     FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS blocked_keywords (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    keyword TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 """
 
@@ -409,6 +421,77 @@ async def delete_topic(db: aiosqlite.Connection, topic_id: int) -> bool:
     cursor = await db.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
     await db.commit()
     return cursor.rowcount > 0
+
+
+# --- Blocked Keywords CRUD ---
+
+
+def _row_to_blocked_keyword(row: aiosqlite.Row) -> BlockedKeyword:
+    """Convert a database row to a BlockedKeyword model."""
+    return BlockedKeyword(
+        id=row["id"],
+        keyword=row["keyword"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+async def get_blocked_keywords(db: aiosqlite.Connection) -> list[BlockedKeyword]:
+    """Get all blocked keywords, ordered alphabetically."""
+    rows = await db.execute_fetchall(
+        "SELECT * FROM blocked_keywords ORDER BY keyword"
+    )
+    return [_row_to_blocked_keyword(row) for row in rows]
+
+
+async def add_blocked_keyword(db: aiosqlite.Connection, keyword: str) -> BlockedKeyword:
+    """Add a new blocked keyword."""
+    now = _now()
+    cursor = await db.execute(
+        "INSERT INTO blocked_keywords (keyword, created_at) VALUES (?, ?)",
+        (keyword, now),
+    )
+    await db.commit()
+    rows = await db.execute_fetchall(
+        "SELECT * FROM blocked_keywords WHERE id = ?", (cursor.lastrowid,)
+    )
+    return _row_to_blocked_keyword(rows[0])
+
+
+async def delete_blocked_keyword(db: aiosqlite.Connection, keyword_id: int) -> bool:
+    """Delete a blocked keyword by ID. Returns True if deleted."""
+    cursor = await db.execute(
+        "DELETE FROM blocked_keywords WHERE id = ?", (keyword_id,)
+    )
+    await db.commit()
+    return cursor.rowcount > 0
+
+
+# --- App Settings (key/value store) ---
+
+
+async def get_app_setting(
+    db: aiosqlite.Connection, key: str, default: str | None = None
+) -> str | None:
+    """Get an application setting by key, returning default if not found."""
+    rows = await db.execute_fetchall(
+        "SELECT value FROM app_settings WHERE key = ?", (key,)
+    )
+    if rows:
+        return rows[0]["value"]
+    return default
+
+
+async def set_app_setting(db: aiosqlite.Connection, key: str, value: str) -> None:
+    """Set an application setting (upsert)."""
+    await db.execute(
+        "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    await db.commit()
+
+
+# --- Source-Topic helpers ---
 
 
 async def get_sources_for_topic(

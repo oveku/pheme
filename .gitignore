@@ -30,6 +30,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Plans / internal docs (contain infra details)
+Plans/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -7,8 +7,11 @@ from app.config import Settings, get_settings, reset_settings
 
 
 class TestSettings:
-    def test_default_values(self):
-        settings = Settings()
+    def test_default_values(self, monkeypatch):
+        # Clear env vars that .env might set so we get true defaults
+        monkeypatch.delenv("OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        settings = Settings(_env_file=None)
         assert settings.ollama_host == "http://localhost:11434"
         assert settings.ollama_model == "qwen2.5:1.5b-instruct"
         assert settings.smtp_host == "smtp.gmail.com"

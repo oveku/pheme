@@ -1,4 +1,8 @@
-"""Topic matching and article ranking for the digest pipeline."""
+"""Topic matching, article ranking, filtering, and deduplication.
+
+Implements the Strategy pattern for article filtering and a deduplication
+pass to ensure each article appears in at most one topic section.
+"""
 
 import logging
 import re
@@ -157,5 +161,132 @@ def match_articles_to_topics(
         ranked = rank_articles_for_topic(articles, topic)
         if ranked:
             result[topic.id] = ranked
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Global keyword blocklist filtering (Strategy pattern)
+# ---------------------------------------------------------------------------
+
+
+def filter_blocked_articles(
+    articles: list[Article],
+    blocked_keywords: list[str],
+    *,
+    use_full_text: bool = False,
+) -> list[Article]:
+    """Remove articles containing any blocked keyword (case-insensitive).
+
+    Args:
+        articles: List of articles to filter.
+        blocked_keywords: Keywords/phrases to block.
+        use_full_text: When True, also search article.full_text.
+                       When False, only title + content_preview are checked.
+
+    Returns:
+        Filtered list with blocked articles removed.
+    """
+    if not blocked_keywords:
+        return list(articles)
+
+    keywords_lower = [kw.lower() for kw in blocked_keywords]
+    filtered: list[Article] = []
+
+    for article in articles:
+        body = (
+            (article.full_text or "")
+            if use_full_text
+            else (article.content_preview or "")
+        )
+        searchable = (article.title + " " + body).lower()
+
+        if any(kw in searchable for kw in keywords_lower):
+            logger.info(
+                "Blocked article '%s' — matched keyword blocklist",
+                article.title[:80],
+            )
+            continue
+
+        filtered.append(article)
+
+    blocked_count = len(articles) - len(filtered)
+    if blocked_count:
+        logger.info(
+            "Keyword filter: blocked %d of %d articles", blocked_count, len(articles)
+        )
+    return filtered
+
+
+# ---------------------------------------------------------------------------
+# Cross-topic deduplication
+# ---------------------------------------------------------------------------
+
+
+def deduplicate_across_topics(
+    matched: dict[int, list[ScoredArticle]],
+    topics_by_id: dict[int, Topic],
+) -> dict[int, list[ScoredArticle]]:
+    """Assign each article to exactly one topic (highest score wins).
+
+    When an article appears in multiple topics, it is kept only in the topic
+    where it scored highest.  Ties are broken by:
+      1. Topic priority (higher wins)
+      2. Topic name alphabetically (deterministic fallback)
+
+    Args:
+        matched: topic_id → list of ScoredArticle (from match_articles_to_topics).
+        topics_by_id: topic_id → Topic (for priority / name lookups).
+
+    Returns:
+        A new dict with the same structure, but each article URL appears at most once.
+    """
+    if not matched:
+        return {}
+
+    # 1. Build a map: article_url → list[(topic_id, score)]
+    url_to_entries: dict[str, list[tuple[int, float]]] = {}
+    for topic_id, scored_articles in matched.items():
+        for sa in scored_articles:
+            url_to_entries.setdefault(sa.article.url, []).append(
+                (topic_id, sa.score)
+            )
+
+    # 2. Determine the winning topic for each duplicated article
+    urls_to_remove: dict[int, set[str]] = {}  # topic_id → urls to remove
+    for url, entries in url_to_entries.items():
+        if len(entries) <= 1:
+            continue  # Not duplicated
+
+        # Sort by: score DESC, priority DESC, name ASC
+        def _sort_key(entry: tuple[int, float]) -> tuple[float, int, str]:
+            tid, score = entry
+            topic = topics_by_id.get(tid)
+            priority = topic.priority if topic else 0
+            name = topic.name if topic else ""
+            # Negate score and priority so higher values sort first;
+            # name sorts ascending naturally.
+            return (-score, -priority, name)
+
+        entries.sort(key=_sort_key)
+        winner_topic_id = entries[0][0]
+
+        # Mark this URL for removal from all non-winning topics
+        for tid, _ in entries[1:]:
+            urls_to_remove.setdefault(tid, set()).add(url)
+
+    # 3. Build cleaned result
+    result: dict[int, list[ScoredArticle]] = {}
+    for topic_id, scored_articles in matched.items():
+        remove_set = urls_to_remove.get(topic_id, set())
+        cleaned = [sa for sa in scored_articles if sa.article.url not in remove_set]
+        result[topic_id] = cleaned
+
+    deduped = sum(len(s) for s in urls_to_remove.values())
+    if deduped:
+        logger.info(
+            "Deduplication: removed %d cross-topic duplicate article placements",
+            deduped,
+        )
 
     return result

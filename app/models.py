@@ -144,6 +144,16 @@ class Article(BaseModel):
     )
 
 
+class BlockedKeyword(BaseModel):
+    """A globally blocked keyword for article filtering."""
+
+    id: int
+    keyword: str = Field(..., min_length=1, description="Keyword or phrase to block")
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class DigestEntry(BaseModel):
     """An article paired with its LLM-generated summary."""
 
