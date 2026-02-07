@@ -20,6 +20,7 @@ class TestSettings:
         assert settings.digest_cron_minute == 0
         assert settings.digest_timezone == "UTC"
         assert settings.pheme_port == 8020
+        assert settings.digest_max_age_hours == 24
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")

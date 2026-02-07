@@ -17,10 +17,12 @@ from app.database import (
 from app.fetchers.factory import FetcherFactory
 from app.fetchers.extractor import fetch_full_text
 from app.summarizer.llm import LLMSummarizer, SummarizerResult
+from app.config import get_settings
 from app.pipeline.matching import (
     match_articles_to_topics,
     deduplicate_across_topics,
     filter_blocked_articles,
+    filter_old_articles,
 )
 from app.email.sender import send_digest_email
 
@@ -84,6 +86,15 @@ class DigestPipeline:
         # Update last_fetched for successful sources
         for source_id in successful_source_ids:
             await self._update_last_fetched(source_id)
+
+        # 1b. Drop stale articles (max age)
+        max_age = self._get_max_age_hours()
+        if max_age > 0:
+            all_articles = filter_old_articles(all_articles, max_age)
+            logger.info(
+                "After age filter (%dh): %d articles remain",
+                max_age, len(all_articles),
+            )
 
         # 2. Extract full text
         await self._extract_full_text(all_articles)
@@ -249,6 +260,10 @@ class DigestPipeline:
         if hasattr(self.db, "get_blocked_keywords"):
             return await self.db.get_blocked_keywords()
         return await get_blocked_keywords(self.db)
+
+    def _get_max_age_hours(self) -> int:
+        """Get max article age from settings."""
+        return get_settings().digest_max_age_hours
 
     async def _get_filter_scope_full_text(self) -> bool:
         """Read the filter_scope setting; returns True if full_text enabled."""

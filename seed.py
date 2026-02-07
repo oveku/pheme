@@ -84,14 +84,12 @@ async def seed():
 
     existing = await get_sources(db)
     if existing:
-        print(f"Database already has {len(existing)} sources, skipping seed.")
-        return
-
-    for source_data in DEFAULT_SOURCES:
-        source = await create_source(db, source_data)
-        print(f"  Added: {source.name} ({source.type.value}) - {source.url}")
-
-    print(f"\nSeeded {len(DEFAULT_SOURCES)} default sources.")
+        print(f"Database already has {len(existing)} sources, skipping source seed.")
+    else:
+        for source_data in DEFAULT_SOURCES:
+            source = await create_source(db, source_data)
+            print(f"  Added: {source.name} ({source.type.value}) - {source.url}")
+        print(f"\nSeeded {len(DEFAULT_SOURCES)} default sources.")
 
     # Seed blocked keywords
     existing_keywords = await get_blocked_keywords(db)

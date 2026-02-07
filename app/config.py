@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     digest_cron_minute: int = Field(default=0)
     digest_timezone: str = Field(default="UTC")
 
+    # Article freshness
+    digest_max_age_hours: int = Field(
+        default=24,
+        description="Maximum article age in hours. Articles older than this are dropped. 0 = no limit.",
+    )
+
     # API
     pheme_port: int = Field(default=8020)
     pheme_db_path: str = Field(default="./pheme.sqlite")

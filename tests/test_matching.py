@@ -10,6 +10,7 @@ from app.pipeline.matching import (
     match_articles_to_topics,
     deduplicate_across_topics,
     filter_blocked_articles,
+    filter_old_articles,
     _build_searchable_text,
     _keyword_score,
     _recency_score,
@@ -577,3 +578,82 @@ class TestDeduplicateAcrossTopics:
     def test_empty_input(self):
         result = deduplicate_across_topics({}, {})
         assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# Article age filtering
+# ---------------------------------------------------------------------------
+
+
+class TestFilterOldArticles:
+    """Tests for the max-age freshness filter."""
+
+    def _make_article(
+        self,
+        title: str = "Test",
+        published_at: "datetime | None" = None,
+        url: str = "https://example.com/a",
+    ) -> Article:
+        return Article(
+            title=title,
+            url=url,
+            source_name="TestSource",
+            content_preview="Some content",
+            published_at=published_at,
+        )
+
+    def test_zero_max_age_passes_all(self):
+        """max_age_hours=0 disables filtering."""
+        old = self._make_article(
+            published_at=datetime(2020, 1, 1, tzinfo=timezone.utc)
+        )
+        result = filter_old_articles([old], max_age_hours=0)
+        assert len(result) == 1
+
+    def test_recent_article_kept(self):
+        now = datetime.now(timezone.utc)
+        recent = self._make_article(published_at=now - timedelta(hours=2))
+        result = filter_old_articles([recent], max_age_hours=24, now=now)
+        assert len(result) == 1
+
+    def test_old_article_dropped(self):
+        now = datetime.now(timezone.utc)
+        old = self._make_article(published_at=now - timedelta(hours=48))
+        result = filter_old_articles([old], max_age_hours=24, now=now)
+        assert len(result) == 0
+
+    def test_exactly_at_cutoff_kept(self):
+        """Article exactly 24 hours old should be kept (>= cutoff)."""
+        now = datetime.now(timezone.utc)
+        borderline = self._make_article(published_at=now - timedelta(hours=24))
+        result = filter_old_articles([borderline], max_age_hours=24, now=now)
+        assert len(result) == 1
+
+    def test_no_date_kept(self):
+        """Articles without published_at are kept (benefit of the doubt)."""
+        no_date = self._make_article(published_at=None)
+        result = filter_old_articles([no_date], max_age_hours=24)
+        assert len(result) == 1
+
+    def test_mixed_articles(self):
+        now = datetime.now(timezone.utc)
+        articles = [
+            self._make_article(title="Recent", published_at=now - timedelta(hours=1), url="https://a.com"),
+            self._make_article(title="Old", published_at=now - timedelta(hours=48), url="https://b.com"),
+            self._make_article(title="No date", published_at=None, url="https://c.com"),
+        ]
+        result = filter_old_articles(articles, max_age_hours=24, now=now)
+        assert len(result) == 2
+        titles = {a.title for a in result}
+        assert titles == {"Recent", "No date"}
+
+    def test_empty_list(self):
+        result = filter_old_articles([], max_age_hours=24)
+        assert result == []
+
+    def test_custom_max_age(self):
+        """Works with different max_age values."""
+        now = datetime.now(timezone.utc)
+        article = self._make_article(published_at=now - timedelta(hours=10))
+        assert len(filter_old_articles([article], max_age_hours=6, now=now)) == 0
+        assert len(filter_old_articles([article], max_age_hours=12, now=now)) == 1

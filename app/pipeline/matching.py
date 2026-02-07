@@ -166,6 +166,58 @@ def match_articles_to_topics(
 
 
 # ---------------------------------------------------------------------------
+# Article age filtering
+# ---------------------------------------------------------------------------
+
+
+def filter_old_articles(
+    articles: list[Article],
+    max_age_hours: int,
+    *,
+    now: "datetime | None" = None,
+) -> list[Article]:
+    """Remove articles older than max_age_hours.
+
+    Args:
+        articles: List of articles to filter.
+        max_age_hours: Maximum age in hours. 0 means no filtering.
+        now: Override current time (for testing).
+
+    Returns:
+        Filtered list. Articles without a published_at date are kept
+        (benefit of the doubt).
+    """
+    if max_age_hours <= 0:
+        return list(articles)
+
+    from datetime import datetime, timezone, timedelta
+
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(hours=max_age_hours)
+    filtered: list[Article] = []
+
+    for article in articles:
+        if article.published_at is None:
+            filtered.append(article)  # No date → keep
+            continue
+        if article.published_at >= cutoff:
+            filtered.append(article)
+        else:
+            logger.info(
+                "Dropped stale article '%s' (published %s)",
+                article.title[:80],
+                article.published_at.isoformat(),
+            )
+
+    dropped = len(articles) - len(filtered)
+    if dropped:
+        logger.info(
+            "Age filter: dropped %d of %d articles (max_age=%dh)",
+            dropped, len(articles), max_age_hours,
+        )
+    return filtered
+
+
+# ---------------------------------------------------------------------------
 # Global keyword blocklist filtering (Strategy pattern)
 # ---------------------------------------------------------------------------
 
