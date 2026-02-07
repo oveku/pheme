@@ -1,5 +1,6 @@
 """Pheme FastAPI application."""
 
+import logging
 import pathlib
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,12 @@ from app.database import close_db, get_db, init_db
 from app.api import router as api_router
 from app.ui import router as ui_router
 from app.scheduler.jobs import start_scheduler, stop_scheduler
+
+# Configure logging so all app loggers emit INFO+ to stderr (Docker captures this)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 
 @asynccontextmanager
