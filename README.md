@@ -26,24 +26,26 @@ She runs entirely on your own hardware — no cloud APIs, no tracking, no subscr
 - **Multi-source aggregation** — RSS/Atom feeds, Reddit subreddits, and generic web scraping via a pluggable fetcher architecture
 - **Local LLM summarization** — powered by [Ollama](https://ollama.com); runs any model you choose (default: `qwen2.5:1.5b-instruct`)
 - **Topic-based digests** — organize sources into topics with keyword matching, regex patterns, and priority-based ranking
+- **Cross-topic deduplication** — each article appears in only one section, assigned to the highest-scoring topic
+- **Keyword filtering** — global blocklist to suppress articles matching unwanted keywords, with configurable scope (title+preview or full text)
 - **Full-text extraction** — fetches complete article content for better summaries, not just RSS snippets
 - **Scheduled delivery** — daily email via APScheduler cron (default: 06:00 UTC)
-- **Admin UI** — built-in dark-themed web interface for managing sources, topics, and triggering digests
-- **Comprehensive tests** — 200+ tests with 80%+ coverage target
+- **Admin UI** — built-in dark-themed web interface for managing sources, topics, keyword blocklist, and triggering digests
+- **Comprehensive tests** — 230+ tests with 80%+ coverage target
 
 ## Architecture
 
 ```
 RSS Feeds ─┐
-Reddit ────┤── [Fetchers]  ── [Full-text Extract] ── [Topic Matching]
-Web Pages ─┘   Strategy +      BeautifulSoup          Keyword + regex
-               Factory                                 scoring
+Reddit ────┤── [Fetchers]  ── [Full-text Extract] ── [Keyword Filter]
+Web Pages ─┘   Strategy +      BeautifulSoup          Global blocklist
+               Factory                                 (configurable)
 
                     ↓
 
-              [Summarizer]  →  [Composer]  →  [Email Sender]  →  📬
-              Ollama LLM       Jinja2 HTML     aiosmtplib
-              (local)          + plain text     (STARTTLS)
+              [Topic Matching] ── [Dedup] ── [Summarizer] → [Composer] → 📬
+              Keyword + regex     One article   Ollama LLM    Jinja2 HTML
+              scoring             per section   (local)       + plain text
 
                     ↓
 
@@ -121,8 +123,7 @@ Pheme includes a built-in admin interface at `/admin` for managing your digest w
 | Dashboard | `/admin` | Overview of sources, topics, and recent digests |
 | Sources | `/admin/sources` | Add, view, and delete RSS/Reddit/web sources |
 | Topics | `/admin/topics` | Create topics with keywords, regex patterns, and priorities |
-| Digest | `/admin/digest` | Trigger a manual digest run and view send history |
-
+| Digest | `/admin/digest` | Trigger a manual digest run and view send history || Settings | `/admin/settings` | Manage blocked keywords and configure filter scope |
 ## API Reference
 
 ### Sources
@@ -234,11 +235,11 @@ Pheme uses several classic design patterns:
 
 | Pattern | Where | Purpose |
 |---------|-------|---------|
-| **Strategy** | `fetchers/` | RSS, Reddit, and Web fetchers are interchangeable |
+| **Strategy** | `fetchers/`, `matching.py` | Interchangeable fetchers; configurable filter scope |
 | **Factory** | `FetcherFactory` | Creates the correct fetcher from source type |
 | **Template Method** | `BaseFetcher.fetch()` | Defines connect → extract → normalize skeleton |
 | **Singleton** | `config.py`, `database.py` | Settings and DB connection managed as singletons |
-| **Pipeline** | `DigestPipeline` | Orchestrates fetch → extract → match → summarize → email |
+| **Pipeline** | `DigestPipeline` | Orchestrates fetch → extract → filter → match → dedup → summarize → email |
 
 ## Project Structure
 
@@ -248,7 +249,7 @@ pheme/
 │   ├── api/           # REST API routes (sources, topics, digest)
 │   ├── email/         # HTML/plain-text composer + SMTP sender
 │   ├── fetchers/      # RSS, Reddit, Web fetchers + factory
-│   ├── pipeline/      # Digest orchestrator + topic matching engine
+│   ├── pipeline/      # Digest orchestrator + topic matching + filtering + dedup
 │   ├── scheduler/     # APScheduler cron job definitions
 │   ├── static/        # Icons and static assets
 │   ├── summarizer/    # Ollama LLM client with fallback
@@ -258,7 +259,7 @@ pheme/
 │   ├── database.py    # async SQLite CRUD layer
 │   ├── main.py        # FastAPI app with lifespan management
 │   └── models.py      # Pydantic data models
-├── tests/             # 200+ tests (pytest + pytest-asyncio)
+├── tests/             # 230+ tests (pytest + pytest-asyncio)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml
